@@ -173,6 +173,30 @@ linux设备远程监控程序。可以根据linux设备的IP与设备通信，�
         \item 写一个程序，获取开发板的信息或者控制，并通过Socket通信
       \end{enumerate}
       这些想法都是很有实用价值的。但是在后面实践中，发现开发板的USB接口没法用，在固件层就没有进行连接，更改硬件工程，对USB进行驱动，剩余的时间难以完成，我们选择第二个，比较偏应用层，基本没有问题。
+
+    \item 尝试增加wifi模块
+
+
+    这里有两条路可以选择
+    \begin{enumerate}
+      \item 仍然尝试驱动ONetSwitch20开发板上的工作，用USBwifi模块
+      \item ONetSwitch30开发板上有自带的PCIe
+    \end{enumerate}
+
+      实验室有网件的N150 USB Wi-Fi，而且OpenWRT的内核源码编译有可以加上这个模块的驱动，那么剩下的问题就是解决USB的问题。使用OpenWRT提供的固件可以驱动USB：
+      \begin{figure}[!h]
+      \centering
+      \includegraphics[width=\textwidth]{ruijie.png}
+      \caption{无线网卡}
+      \end{figure}
+      但是还是需要解决叠锶官方固件里USB连线的问题。
+
+
+      使用ONetSwitch30的PCIe-wifi模块，同样要解决固件的问题，好在官方分别提供了wifi和以太网口的tcl工程文件。相比于上一种，应该会更容易些。
+
+
+      两种方案都需要从硬件工程入手，重建硬件工程，然后进行整合或者添加模块。但是官方Tcl文件运行起来还有不少BUG，折腾完了最后的时间。
+
 \end{enumerate}
 \section{部分代码}
 硬件课设很多是固件层和操作系统的工作，这里展示锐捷认证和远程监控的部分代码。
