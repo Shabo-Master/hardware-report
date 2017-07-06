@@ -24,7 +24,7 @@
     This is a report of a hardware course design report.
     The deisgn is compeleted by the \emph{Client} group, which is made up of
 
-    
+
     Zhenyuan Jia, Zheng Wan and Falu Xiao.
 }
 \enkeywords
@@ -199,17 +199,394 @@ linux设备远程监控程序。可以根据linux设备的IP与设备通信，�
 
 \end{enumerate}
 \section{部分代码}
-硬件课设很多是固件层和操作系统的工作，这里展示锐捷认证和远程监控的部分代码。
+硬件课设很多是固件层和操作系统的工作，这里展示锐捷认证和远程监控的部分主要代码。
 
 
-MentoHUST代码
+\textbf{认证原理：}
+\begin{verbatim}
+================================================================
+锐捷的认证过程，分为 交换机发现，用户名和密码认证，和心跳维持 三个部分。
+
+== 交换机发现 ==
+
+交换机发现，就是通过发送特定的数据包，找到网络上负责执行锐捷认证的那台交换机的网卡地址。
+
+交换机发现所发送的包，是一个广播包。其广播地址在不同的版本里是不一样的。
+在 v2 版本里，广播地址是标准的以太网广播包，也就是目的MAC地址 全 0 的。
+在其他版本里，有需要一个特定的一个MAC地址作为广播包的目的地址。
+
+除了地址，广播包还带有额外的数据。在 v2 版本里，这个数据由一个 “固定的数据部分”+一个随机数据 构成。 而在 v3 里，这部分数据需要从官方的客户端里进行提取。
+
+在发送完一个广播包后，客户端等待锐捷交换机的响应，锐捷交换机会发回响应包，这样客户端就知道了锐捷交换机的 MAC 地址了 （从以太网包的发送方地址里获取）。
+
+除了返回的响应包，一并返回的还有接下来 挑战认证协议 里需要用到的一个随机数种子。
+
+==挑战认证协议==
+
+锐捷使用的认证协议非常类似 HTTP 所使用的 挑战认证协议。由服务器端发回一个随机数种子，然后客户端将用户名密码和随机数种子加到一起，执行 md5 校验，并将此 md5 校验结果发给锐捷。 这么做的原因是，如果有人监听数据包截取了 md5 校验过的密码，也不能用这个 md5 的结果来替代你登录服务器。 因为每次的随机数种子是不一样的，只有真正知道密码的才能构造出合适的 md5 串来。
+
+当然，第一部分 “服务器端发现” 的时候在广播包后面附带的数据，同样要附带在这里。这部分附加数据，是所有客户端发送的数据包都必须携带的。
+
+锐捷检验过 md5 数值后，就会返回一个成功的数据包了，接下来就进入了心跳协议了
+
+== 心跳协议 ==
+
+锐捷检验过 md5 数值后，就会返回一个成功的数据包了，这个成功的数据包里，包含又一个 随机数种子。 这个随机数种子还经过了一定的混淆算法。需要首先反向解密。
+
+解密后，每次发送心跳包钱，都将这个数字+1. 并将加1 后的数字再次加密。
+解密后，再附带锐捷那一套冗长的数据，合并后的数据即可发送了。
+
+心跳包发送频率可以控制在每分钟一个即可。
+================================================================
+\end{verbatim}
+
+
+\textbf{MentoHUST代码：}
+\begin{lstlisting}[language=C]
+extern volatile int state;    //认证状态状态
+extern u_char *fillBuf;     //缓冲指针
+
+int main(int argc, char **argv)
+{
+#ifdef ENABLE_NLS
+  textdomain(GETTEXT_PACKAGE);
+  setlocale(LC_ALL, "");
+#endif
+  atexit(exit_handle);
+  initConfig(argc, argv);/*对传入的参数进行处理*/
+  /*signal函数，绑定linux信号到处理函数sig_handle，sig_handle是私有函数，对系统信号进行处理。*/
+  signal(SIGALRM, sig_handle);  /* 定时器 */
+  signal(SIGHUP, sig_handle);  /* 注销时 */
+  signal(SIGINT, sig_handle);  /* Ctrl+C */
+  signal(SIGQUIT, sig_handle);  /* Ctrl+\ */
+  signal(SIGTSTP, sig_handle);  /* Ctrl+Z */
+  signal(SIGTERM, sig_handle);  /* 被结束时 */
+  if (dhcpMode == 3)    /* 认证前DHCP */
+    switchState(ID_DHCP);
+  else
+    switchState(ID_START);  /* 开始认证 */
+
+/*主函数调用pcap_loop函数，进入循环，不断抓包进行判断。*/
+  if (-1 == pcap_loop(hPcap, -1, pcap_handle, NULL)) { /* 开始捕获数据包 */
+    printf(_("!! 捕获数据包失败，请检查网络连接！\n"));
+#ifndef NO_NOTIFY /*消息显示功能，需呀libnotify库*/
+    if (showNotify && show_notify(_("MentoHUST - 错误提示"),
+      _("捕获数据包失败，请检查网络连接！"), 1000*showNotify) < 0)
+      showNotify = 0;
+#endif
+  }
+  exit(EXIT_FAILURE);
+}
+
+\*MentoHUST使用的libpcap库，下面是libpcap处理函数，抓到包之后根据包内信息判断认证状态。
+再将得到的状态传给switchState()函数*\
+static void pcap_handle(u_char *user, const struct pcap_pkthdr *h, const u_char *buf)
+{
+  static unsigned failCount = 0;
+#ifndef NO_ARP
+  if (buf[0x0c]==0x88 && buf[0x0d]==0x8e) {
+#endif
+    if (memcmp(destMAC, buf+6, 6)!=0 && startMode>2)  /* 服务器MAC地址不符 */
+      return;
+    capBuf = buf;
+    if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x01) {  /* 验证用户名 */
+      if (startMode < 3) {
+        memcpy(destMAC, buf+6, 6);
+        printf(_("** 认证MAC:\t%s\n"), formatHex(destMAC, 6));
+        startMode += 3; /* 标记为已获取 */
+      }
+      if (startMode==3 && memcmp(buf+0x17, "User name", 9)==0)  /* 塞尔 */
+        startMode = 5;
+      switchState(ID_IDENTITY);
+    }
+    else if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x04) /* 验证密码 */
+      switchState(ID_CHALLENGE);
+    else if (buf[0x0F]==0x00 && buf[0x12]==0x03) {  /* 认证成功 */
+      printf(_(">> 认证成功!\n"));
+      failCount = 0;
+      if (!(startMode%3 == 2)) {
+        getEchoKey(buf);
+        showRuijieMsg(buf, h->caplen);
+      }
+      if (dhcpMode==1 || dhcpMode==2) /* 二次认证第一次或者认证后 */
+        switchState(ID_DHCP);
+      else if (startMode%3 == 2)
+        switchState(ID_WAITECHO);
+      else
+        switchState(ID_ECHO);
+    }
+    else if (buf[0x0F]==0x00 && buf[0x12]==0x01 && buf[0x16]==0x02) /* 显示赛尔提示信息 */
+      showCernetMsg(buf);
+    else if (buf[0x0F] == 0x05) /* (赛尔)响应在线 */
+      switchState(ID_ECHO);
+    else if (buf[0x0F]==0x00 && buf[0x12]==0x04) {  /* 认证失败或被踢下线 */
+      if (state==ID_WAITECHO || state==ID_ECHO) {
+        printf(_(">> 认证掉线，开始重连!\n"));
+        switchState(ID_START);
+      }
+      else if (buf[0x1b]!=0 || startMode%3==2) {
+        printf(_(">> 认证失败!\n"));
+        if (startMode%3 != 2)
+          showRuijieMsg(buf, h->caplen);
+        if (maxFail && ++failCount>=maxFail) {
+          printf(_(">> 连续认证失败%u次，退出认证。\n"), maxFail);
+          exit(EXIT_SUCCESS);
+        }
+        restart();
+      }
+      else
+        switchState(ID_START);
+    }
+#ifndef NO_ARP
+  } else if (gateMAC[0]!=0xFE && buf[0x0c]==0x08 && buf[0x0d]==0x06) {
+    if (*(u_int32_t *)(buf+0x1c) == gateway) {
+      char str[50];
+      if (gateMAC[0] == 0xFF) {
+        memcpy(gateMAC, buf+0x16, 6);
+        printf(_("** 网关MAC:\t%s\n"), formatHex(gateMAC, 6));
+        sprintf(str, "arp -s %s %s", formatIP(gateway), formatHex(gateMAC, 6));
+        system(str);
+      } else if (buf[0x15]==0x02 && memcmp(&rip, buf+0x26, 4)==0
+        && memcmp(gateMAC, buf+0x16, 6)!=0) {
+        printf(_("** ARP欺骗:\t%s\n"), formatHex(buf+0x16, 6));
+#ifndef NO_NOTIFY
+        if (showNotify) {
+          sprintf(str, _("欺骗源: %s"), formatHex(buf+0x16, 6));
+          if (show_notify(_("MentoHUST - ARP提示"), str, 1000*showNotify) < 0)
+            showNotify = 0;
+        }
+#endif
+      }
+    }
+  }
+#endif
+}
+
+\*若状态不变，计数器加一，判断是否超时，根据状态判断超时原因。
+若状态改变，返回下一状态处理函数*\
+int switchState(int type)
+{
+  if (state == type) /* 跟上次是同一状态？ */
+    sendCount++;
+  else
+  {
+    state = type;
+    sendCount = 0;
+  }
+  if (sendCount>=MAX_SEND_COUNT && type!=ID_ECHO)  /* 超时太多次？ */
+  {
+    switch (type)
+    {
+    case ID_START:
+      printf(_(">> 找不到服务器，重启认证!\n"));
+      break;
+    case ID_IDENTITY:
+      printf(_(">> 发送用户名超时，重启认证!\n"));
+      break;
+    case ID_CHALLENGE:
+      printf(_(">> 发送密码超时，重启认证!\n"));
+      break;
+    case ID_WAITECHO:
+      printf(_(">> 等候响应包超时，自行响应!\n"));
+      return switchState(ID_ECHO);
+    }
+    return restart();
+  }
+  switch (type)
+  {
+  case ID_DHCP:
+    return renewIP();
+  case ID_START:
+    return sendStartPacket();
+  case ID_IDENTITY:
+    return sendIdentityPacket();
+  case ID_CHALLENGE:
+    return sendChallengePacket();
+  case ID_WAITECHO: /* 塞尔的就不ping了，不好计时 */
+    return waitEchoPacket();
+  case ID_ECHO:
+    if (pingHost && sendCount*echoInterval > 60) {  /* 1分钟左右 */
+      if (isOnline() == -1) {
+        printf(_(">> 认证掉线，开始重连!\n"));
+        return switchState(ID_START);
+      }
+      sendCount = 1;
+    }
+#ifndef NO_ARP
+    if (gateMAC[0] != 0xFE)
+      sendArpPacket();
+#endif
+    return sendEchoPacket();
+  case ID_DISCONNECT:
+    return sendLogoffPacket();
+  }
+  return 0;
+}
+\end{lstlisting}
+
+
+
+
+
+\textbf{Linux信息获取代码：}
+\begin{lstlisting}[language=Python]
+#getinfo-srv.py
+def tcplink(sock, addr):
+#Linux状态获取函数直接读取/proc目录下文件获取数据，或者调用Python相关库
+    def memory_stat(): #获取磁盘数据
+
+    def cpu_stat(): #获取CPU状态
+
+    def net_stat(): #获取网络状态
+
+    def uptime_stat(): #获取运行时间
+
+    def disk_stat():  #磁盘使用空间,单位Byte
+    #将数据组织成dict结构
+    sendpacket = {'cpu_stat':cpu_stat(), 'mem_stat':memory_stat(), 'net_stat':net_stat(), 'runtime_stat':uptime_stat(), 'disk_stat':disk_stat()}
+    #将dict转换成str发送
+    sock.send(str(sendpacket))
+    time.sleep(1)
+
+#socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('0.0.0.0', 9999))
+s.listen(5)
+print('Waiting for connection...')
+
+while True:
+    sock, addr = s.accept()
+    
+    while True:
+        tcplink(sock, addr)
+
+
+#getinfo-clt.py
+def get_info():
+    # global server_list
+    server = '192.168.1.1'
+    connPort = 9999
+    # readtarget()
+    connserver(server, connPort)
+
+def connserver(host, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    while True:
+        buf = s.recv(4096)
+        if not len(buf):
+            break
+
+        def netstat_proc(info):
+            resu = ''
+            for di in info:
+                resu = resu+str(di['interface'])+':\n接收:\n'+str(di['ReceiveBytes']/1048576)+'MB\t\t'+str(di['ReceivePackets'])+'Packets\n发送:\n'+str(di['TransmitBytes']/1048576)+'MB\t\t'+str(di['TransmitPackets'])+'Packets\n\n'
+            return resu
+        info = eval(str(buf).strip('\n'))#将str再转换回dict结构
+        #分别存储CPU、磁盘等的输出信息
+        global buf1
+        global buf2
+        global buf3
+        global buf4
+        global buf5
+        buf1 = '总内存:\t\t'+str(info['mem_stat']['MemTotal']/1048576)+'MB\n剩余内存:\t\t'+str(info['mem_stat']['MemFree']/1048576)+'MB'
+        buf2 = 'Hardware:\t'+cst['Hardware']+'Model name:\t'+cst['model name']+'CPU implementer:\t'+cst['CPU implementer']+'CPU architecture:\t'+cst['CPU architecture']+'Features:\t'+cst['Features']
+        buf3 = str(info['runtime_stat']['day'])+'天'+str(info['runtime_stat']['hour'])+'时'+str(info['runtime_stat']['minute'])+'分'+str(info['runtime_stat']['second'])+'秒'#).strip('\n')
+        buf4 = netstat_proc(info['net_stat'])
+        buf5 = 'Available:\t\t'+str(info['disk_stat']['available']/1048576)+'GB\nUsed:\t\t'+str(info['disk_stat']['used']/1048576)+'GB\nCapacity:\t\t'+str(info['disk_stat']['capacity']/1048576)+'GB'
+#info['cpu_stat']['vendor_id'] + 
+
+if __name__ == "__main__":
+    # server_list = []
+    buf1 = ""
+    buf2 = ""
+    buf3 = ""
+    buf4 = ""
+    buf5 = ""
+    t1 = threading.Thread(target = main_window, args = ())#图形界面的线程
+    t2 = threading.Thread(target = get_info, args = ())#数据获取线程
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+\end{lstlisting}
+
+
+
+
+
+\textbf{Linux控制代码：}
+\begin{lstlisting}[language=Python]
+#ctrl-srv.py
+def parsecmd(strings):
+    midsplit = str(strings).split(" ")
+    if len(midsplit) >= 2 and midsplit[0] == "cmd":#检测命令头是否有cmd防止出错
+        try:
+            command = subprocess.Popen(strings[4:], shell=True)
+            command.communicate()
+            print "\n"
+        except Exception, e:
+            print e.message
+            traceback.print_exc()
+
+def recvdata(port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)#创建套接字
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('', port))#绑定
+    s.listen(1)#监听端口
+    print "[+] Server is running on port:%s at %s" % (str(port), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
+    while True:
+        mainsocket, mainhost = s.accept()
+        print "[+] Connect success -> %s at %s" % (str(mainhost), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
+        if mainhost:
+            while True:
+                data = mainsocket.recv(1024)
+                if data:
+                    print "[+] Receive:%s" % data
+                    mainsocket.sendall("[Server]success")
+                    parsecmd(data)
+                if data == "close session":
+                    mainsocket.close()
+                    print "[+] Quit success"
+                    break
+            break
+
+
+if __name__ == "__main__":
+    # some public variable
+    connPort = 47091
+    onethreads = threading.Thread(target=recvdata, args=(connPort,))
+    onethreads.start()
+
+#ctrl-client.py
+def connserver(host, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    while True:
+        print "\n[*] Please input command:"
+        data = raw_input()#获取输入指令
+        if not data:
+            break
+        s.sendall(data)#发送
+        recvdata = s.recv(1024)
+        print "[+] Send %s:%s -> %s" % (host, str(connPort), data)
+        time.sleep(0)
+        if recvdata:
+            print "[+] Receive :%s" % recvdata
+        if data == "close session":
+            s.close()
+            break
+
+if __name__ == "__main__":
+    host = '192.168.1.201'
+    connPort = 47091
+
+    connserver(host, connPort)#连接对应服务端
+\end{lstlisting}
 \chapter{开发工作评价}
-\section{对生产效率的评价}
 \section{对产品质量的评价}
-\section{对技术方法的评价}
+\section{组内成员评价}
 \chapter{经验与教训}
-
-
 \end{document}
 
 
