@@ -89,66 +89,9 @@ MentoHUST是一个支持Windows、Linux、Mac OS下的第三方锐捷认证的�
 
 OpenWrt是适合于嵌入式设备的一个Linux发行版。相对原厂固件而言，OpenWrt不是一个单一、静态的固件，而是提供了一个可添加软件包的可写的文件系统。这使用户可以自由的选择应用程序和配置，而不必受设备提供商的限制，并且可以使用一些适合某方面应用的软件包来定制你的设备。对于开发者来说，OpenWrt是一个框架，开发者不必麻烦的构建整个固件就能得到想要的应用程序；对于用户来说，这意味着完全定制的能力，与以往不同的方式使用设备，OPKG包含超过3500个软件。
 
-\chapter{实际开发结果}
-
-\section{产品}
-\begin{figure}[!h]
-\centering
-  \begin{subfigure}[b]{0.4\textwidth}
-  \includegraphics[width=\textwidth]{product.png}
-  \caption{实物图}
-  \end{subfigure}
-~
-  \begin{subfigure}[b]{0.4\textwidth}
-  \includegraphics[width=\textwidth]{ons20-hw.png}
-  \caption{结构}
-  \end{subfigure}
-\end{figure}
-我们使用的是老师提供的ONetSwitch20开发板。该开发板母板是一块Xilinx公司的Zedboard开发板，然后通过FMC接口扩展了一块带有四个GE口的扩展板。
-
-\begin{figure}[!h]
-\centering
-\includegraphics[width=.8\textwidth]{zynqinfo.png}
-\caption{远程监视}
-\end{figure}
-
-\begin{figure}[!h]
-\centering
-  \begin{subfigure}[b]{0.5\textwidth}
-  \includegraphics[width=\textwidth]{zynqctrl1.png}
-  \caption{远程控制客户端}
-  \end{subfigure}
-  ~
-  \begin{subfigure}[b]{0.4\textwidth}
-  \includegraphics[width=\textwidth]{zynqctrl2.png}
-  \caption{远程控制服务端}
-  \end{subfigure}
-\end{figure}
-
-linux设备远程监控程序。可以根据linux设备的IP与设备通信，从而获取设备的信息或对设备进行控制。
-
-\section{主要功能和性能}
-
-\begin{enumerate}
-    \item 校园网锐捷认证
-    \item 基本的家庭网关功能
-    \item 通过网络远程监控
-\end{enumerate}
-
-\begin{figure}[!h]
-\centering
-\includegraphics[width=.6\textwidth]{ruijie.png}
-\caption{锐捷认证结果}
-\end{figure}
-
-开发板使用MentoHUST开源软件，能通过校园网锐捷认证，进行上网，上图认证成功并且与百度主页ping通。
-
-
-母板的GE口作为wan口连上校园网，扩展版上的四个GE口作为lan口，连接内网设备。用MentoHUST锐捷认证程序在wan口进行校园网认证，电脑等终端设备接在lan口上，便可以通过开发板上网。
-
-
-开发板连上网络获取IP地址之后，开启服务端程序。可以通过IP地址连接上开发板并与之通信，获取开发板的CPU负载、内存占用率、磁盘使用情况、运行时间、网络情况等数据。
-
+\chapter{设计与实现}
+\section{预期目标}
+我们选的课题是“锐捷认证”。但只是一个能通过校园网锐捷认证的开发板实际意义不大，所以我们还想做一个多网口设备出来。
 \section{开发过程}
 \begin{enumerate}
     \item 将OpenWRT系统刷入Zybo开发板
@@ -198,7 +141,7 @@ linux设备远程监控程序。可以根据linux设备的IP与设备通信，�
       实验室有网件的N150 USB Wi-Fi，而且OpenWRT的内核源码编译有可以加上这个模块的驱动，那么剩下的问题就是解决USB的问题。使用OpenWRT提供的固件可以驱动USB：
       \begin{figure}[!h]
       \centering
-      \includegraphics[width=\textwidth]{ruijie.png}
+      \includegraphics[width=\textwidth]{wlan.png}
       \caption{无线网卡}
       \end{figure}
       但是还是需要解决叠锶官方固件里USB连线的问题。
@@ -211,12 +154,302 @@ linux设备远程监控程序。可以根据linux设备的IP与设备通信，�
 
 \end{enumerate}
 \section{部分代码}
-硬件课设很多是固件层和操作系统的工作，这里展示锐捷认证和远程监控的部分主要代码。
+硬件课设很多是固件层和操作系统的工作，这里展示远程监控的主要代码。
+\textbf{Linux信息获取代码：}
+\begin{lstlisting}[language=Python]
+#getinfo-srv.py
+def tcplink(sock, addr):
+#Linux状态获取函数直接读取/proc目录下文件获取数据，或者调用Python相关库
+    def memory_stat(): #获取磁盘数据
+
+    def cpu_stat(): #获取CPU状态
+
+    def net_stat(): #获取网络状态
+
+    def uptime_stat(): #获取运行时间
+
+    def disk_stat():  #磁盘使用空间,单位Byte
+    #将数据组织成dict结构
+    sendpacket = {'cpu_stat':cpu_stat(), 'mem_stat':memory_stat(), 'net_stat':net_stat(), 'runtime_stat':uptime_stat(), 'disk_stat':disk_stat()}
+    #将dict转换成str发送
+    sock.send(str(sendpacket))
+    time.sleep(1)
+
+#socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('0.0.0.0', 9999))
+s.listen(5)
+print('Waiting for connection...')
+
+while True:
+    sock, addr = s.accept()
+    
+    while True:
+        tcplink(sock, addr)
+
+#-----------------------------------------------------------------#
+#getinfo-clt.py
+def get_info():
+    # global server_list
+    server = '192.168.1.1'
+    connPort = 9999
+    # readtarget()
+    connserver(server, connPort)
+
+def connserver(host, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    while True:
+        buf = s.recv(4096)
+        if not len(buf):
+            break
+
+        def netstat_proc(info):
+            resu = ''
+            for di in info:
+                resu = resu+str(di['interface'])+':\n接收:\n'+str(di['ReceiveBytes']/1048576)+'MB\t\t'+str(di['ReceivePackets'])+'Packets\n发送:\n'+str(di['TransmitBytes']/1048576)+'MB\t\t'+str(di['TransmitPackets'])+'Packets\n\n'
+            return resu
+        info = eval(str(buf).strip('\n'))#将str再转换回dict结构
+        #分别存储CPU、磁盘等的输出信息
+        global buf1
+        global buf2
+        global buf3
+        global buf4
+        global buf5
+        buf1 = '总内存:\t\t'+str(info['mem_stat']['MemTotal']/1048576)+'MB\n剩余内存:\t\t'+str(info['mem_stat']['MemFree']/1048576)+'MB'
+        buf2 = 'Hardware:\t'+cst['Hardware']+'Model name:\t'+cst['model name']+'CPU implementer:\t'+cst['CPU implementer']+'CPU architecture:\t'+cst['CPU architecture']+'Features:\t'+cst['Features']
+        buf3 = str(info['runtime_stat']['day'])+'天'+str(info['runtime_stat']['hour'])+'时'+str(info['runtime_stat']['minute'])+'分'+str(info['runtime_stat']['second'])+'秒'#).strip('\n')
+        buf4 = netstat_proc(info['net_stat'])
+        buf5 = 'Available:\t\t'+str(info['disk_stat']['available']/1048576)+'GB\nUsed:\t\t'+str(info['disk_stat']['used']/1048576)+'GB\nCapacity:\t\t'+str(info['disk_stat']['capacity']/1048576)+'GB'
+#info['cpu_stat']['vendor_id'] + 
+
+if __name__ == "__main__":
+    # server_list = []
+    buf1 = ""
+    buf2 = ""
+    buf3 = ""
+    buf4 = ""
+    buf5 = ""
+    t1 = threading.Thread(target = main_window, args = ())#图形界面的线程
+    t2 = threading.Thread(target = get_info, args = ())#数据获取线程
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+\end{lstlisting}
+
+
+
+
+
+\textbf{Linux控制代码：}
+\begin{lstlisting}[language=Python]
+#ctrl-srv.py
+def parsecmd(strings):
+    midsplit = str(strings).split(" ")
+    if len(midsplit) >= 2 and midsplit[0] == "cmd":#检测命令头是否有cmd防止出错
+        try:
+            command = subprocess.Popen(strings[4:], shell=True)
+            command.communicate()
+            print "\n"
+        except Exception, e:
+            print e.message
+            traceback.print_exc()
+
+def recvdata(port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)#创建套接字
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('', port))#绑定
+    s.listen(1)#监听端口
+    print "[+] Server is running on port:%s at %s" % (str(port), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
+    while True:
+        mainsocket, mainhost = s.accept()
+        print "[+] Connect success -> %s at %s" % (str(mainhost), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
+        if mainhost:
+            while True:
+                data = mainsocket.recv(1024)
+                if data:
+                    print "[+] Receive:%s" % data
+                    mainsocket.sendall("[Server]success")
+                    parsecmd(data)
+                if data == "close session":
+                    mainsocket.close()
+                    print "[+] Quit success"
+                    break
+            break
+
+
+if __name__ == "__main__":
+    # some public variable
+    connPort = 47091
+    onethreads = threading.Thread(target=recvdata, args=(connPort,))
+    onethreads.start()
+
+#-----------------------------------------------------------------#
+#ctrl-client.py
+def connserver(host, port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    while True:
+        print "\n[*] Please input command:"
+        data = raw_input()#获取输入指令
+        if not data:
+            break
+        s.sendall(data)#发送
+        recvdata = s.recv(1024)
+        print "[+] Send %s:%s -> %s" % (host, str(connPort), data)
+        time.sleep(0)
+        if recvdata:
+            print "[+] Receive :%s" % recvdata
+        if data == "close session":
+            s.close()
+            break
+
+if __name__ == "__main__":
+    host = '192.168.1.201'
+    connPort = 47091
+
+    connserver(host, connPort)#连接对应服务端
+\end{lstlisting}
+
+\chapter{系统评测}
+
+\section{实物部分}
+\begin{figure}[!h]
+\centering
+  \begin{subfigure}[b]{0.4\textwidth}
+  \includegraphics[width=\textwidth]{product.png}
+  \caption{实物图}
+  \end{subfigure}
+~
+  \begin{subfigure}[b]{0.4\textwidth}
+  \includegraphics[width=\textwidth]{ons20-hw.png}
+  \caption{结构}
+  \end{subfigure}
+\end{figure}
+我们使用的是老师提供的ONetSwitch20开发板。该开发板母板是一块Xilinx公司的Zedboard开发板，然后通过FMC接口扩展了一块带有四个GE口的扩展板。
+
+\section{软件功能}
+\begin{enumerate}
+    \item 校园网锐捷认证
+    \item 基本的家庭网关功能
+    \item 通过网络远程监控
+\end{enumerate}
+
+\begin{figure}[!h]
+\centering
+\includegraphics[width=.6\textwidth]{ruijie.png}
+\caption{锐捷认证结果}
+\end{figure}
+
+
+开发板使用MentoHUST开源软件，能通过校园网锐捷认证，进行上网，上图认证成功并且与百度主页ping通。
+
+
+母板的GE口作为wan口连上校园网，扩展版上的四个GE口作为lan口，连接内网设备。用MentoHUST锐捷认证程序在wan口进行校园网认证，电脑等终端设备接在lan口上，便可以通过开发板上网。
+
+
+\begin{figure}[!h]
+\centering
+\includegraphics[width=.8\textwidth]{zynqinfo.png}
+\caption{远程监视}
+\end{figure}
+
+\begin{figure}[!h]
+\centering
+  \begin{subfigure}[b]{0.5\textwidth}
+  \includegraphics[width=\textwidth]{zynqctrl1.png}
+  \caption{远程控制客户端}
+  \end{subfigure}
+  ~
+  \begin{subfigure}[b]{0.4\textwidth}
+  \includegraphics[width=\textwidth]{zynqctrl2.png}
+  \caption{远程控制服务端}
+  \end{subfigure}
+\end{figure}
+
+开发板连上网络获取IP地址之后，开启服务端程序。可以通过IP地址连接上开发板并与之通信，获取开发板的CPU负载、内存占用率、磁盘使用情况、运行时间、网络情况等数据。
+
+\section{转发和交换性能}
+  \begin{enumerate}
+    \item 测试软件：iperf3
+    \item 网络网络环境：终端与产品直连
+    \item 测试终端：
+      \begin{enumerate}
+        \item 笔记本，千兆网口，Intel i5-4210H
+        \item NAS，千兆网口，Intel Atom D525
+      \end{enumerate}
+
+      带宽测试:
+      \begin{figure}[!h]
+      \centering
+        \begin{subfigure}[b]{0.5\textwidth}
+        \includegraphics[width=\textwidth]{multhreadtest.png}
+        \caption{多线程测试}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+        \includegraphics[width=\textwidth]{test.png}
+        \caption{不同转发方式测试}
+        \end{subfigure}
+      \end{figure}
+      
+
+      多线程测试是两个终端进行内网直接转发测试，不同线程数得到的带宽。
+      可以看到多线程时速度基本稳定在500Mbps以上。
+
+
+      后一张图是内网转发和NAT转发速度对比，NAT转发相比内网直接转发带宽低很多，但也可以稳定在300Mbps以上。
+
+  \end{enumerate}
+
+\chapter{开发工作评价}
+\section{对产品质量的评价}
+总的来说，最终的成品大体上是达到了可用的程度，如果直接拿到宿舍，能够日常使用，但是欠缺的地方还很多。有以下一些点：
+\begin{enumerate}
+  \item 没有wifi模块。相比于我自己用的路由器，这个东西最大的缺点就是没有wifi模块。这方面确实工作量比较大，最后的时间不太够，但是思路应该是对的，只是在碰到的问题上需要慢慢打磨。
+  \item 远程监控程序过于简陋。信息获取和控制两个程序，没有整合到一起，这对使用十分不方便。界面和功能上都十分简陋，如果日常使用，这个肯定是不够的。
+\end{enumerate}
+\section{组内成员评价}
+组内打分：
+\begin{enumerate}
+  \item 贾镇远：90分
+  \item 万政：85分
+  \item 肖法鲁：85分
+\end{enumerate}
+\chapter{经验与教训}
+本次课程设计，学到了很多东西。以前虽然也学了嵌入式的课程，也知道Bootloader，知道它的作用，但这些理解很抽象。在这次硬件课设中，我们对固件层、操作系统层和应用层都有接触，亲自编译内核，亲自制作嵌入式系统的启动分区。然后我们对嵌入式系统的启动流程和需要的文件，各文件的作用有了比以前更深、更具体的理解。
+
+
+以前我们使用Linux系统，只是使用，对整个系统的组成、Linux Kernel和文件系统之间是怎样的一个关系，都只有一个模糊的概念，知道些东西，但无法表达，不能算真正的理解。这些概念，现在，不再模糊。
+
+
+另一方面，在整个过程中，碰到的问题其实是比较多的，在这样一个不断找到问题根源，然后解决问题的过程中，我想我们更是得到了解决问题的通用方法，那就是查资料、找懂的人同时还必须具有耐心。也许这些还不完全，但确实能在碰到问题时给我们许多帮助。
+
+
+此次硬件课设让我感到遗憾的地方也有很多。我自己感觉这次硬件课设好像不同于上学期的软件课设。这次课设，很多时候我们都使用了别人给出的东西，开源的代码、官方给好的固件，最后拼凑成一个产品，只有最后的Python程序，是自己创造的东西。这让我心里有一种空落落的感觉，不同于上学期，从零构建一个软件工程的那种满足感。但实际上，我们所使用的那些东西，如果完全由我们自己来完成，可能吗？不可能。只说OpenWRT，就完全不可能由我们重写一个。
+
+
+但是仔细想想，或许，我需要的是一个思维的转变。
+
+
+到了路由器这个量级的产品，涉及的东西太多了，从硬件到操作系统，到软件，已经没办法自己独立完成了，该用的东西还得用，将别人的工作整合到一起也是一种创新，也有自己的工作量。
+况且，上学期写邮件客户端，也是调用了Python的各种库，底层的网络通信过程也是别人做好的封装，同样是用了别人的东西。
+
+
+现在的开发过程已经不同于我初学的时候，写的都是简单的程序，老师布置的作业，都是独自完成。如果自己要做一个完整的复杂一点的东西，已经不可能自己从零开始了，不实际，也没必要。“不要重复造轮子”，就是这样一个道理。就是要学会使用工具。
+
+
+这次硬件课设，给我们的这些感悟，以后，将成为我们的助力。
+
+\chapter{附录}
+
+下面是锐捷认证原理和我注释过的部分重要MentoHUST源码：
 
 
 \textbf{认证原理：}
 \begin{verbatim}
-================================================================
+==================================================================
 锐捷的认证过程，分为 交换机发现，用户名和密码认证，和心跳维持 三个部分。
 
 == 交换机发现 ==
@@ -249,7 +482,7 @@ linux设备远程监控程序。可以根据linux设备的IP与设备通信，�
 解密后，再附带锐捷那一套冗长的数据，合并后的数据即可发送了。
 
 心跳包发送频率可以控制在每分钟一个即可。
-================================================================
+==================================================================
 \end{verbatim}
 
 
@@ -436,204 +669,6 @@ int switchState(int type)
 }
 \end{lstlisting}
 
-
-
-
-
-\textbf{Linux信息获取代码：}
-\begin{lstlisting}[language=Python]
-#getinfo-srv.py
-def tcplink(sock, addr):
-#Linux状态获取函数直接读取/proc目录下文件获取数据，或者调用Python相关库
-    def memory_stat(): #获取磁盘数据
-
-    def cpu_stat(): #获取CPU状态
-
-    def net_stat(): #获取网络状态
-
-    def uptime_stat(): #获取运行时间
-
-    def disk_stat():  #磁盘使用空间,单位Byte
-    #将数据组织成dict结构
-    sendpacket = {'cpu_stat':cpu_stat(), 'mem_stat':memory_stat(), 'net_stat':net_stat(), 'runtime_stat':uptime_stat(), 'disk_stat':disk_stat()}
-    #将dict转换成str发送
-    sock.send(str(sendpacket))
-    time.sleep(1)
-
-#socket
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(('0.0.0.0', 9999))
-s.listen(5)
-print('Waiting for connection...')
-
-while True:
-    sock, addr = s.accept()
-    
-    while True:
-        tcplink(sock, addr)
-
-#-----------------------------------------------------------------#
-#getinfo-clt.py
-def get_info():
-    # global server_list
-    server = '192.168.1.1'
-    connPort = 9999
-    # readtarget()
-    connserver(server, connPort)
-
-def connserver(host, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, port))
-    while True:
-        buf = s.recv(4096)
-        if not len(buf):
-            break
-
-        def netstat_proc(info):
-            resu = ''
-            for di in info:
-                resu = resu+str(di['interface'])+':\n接收:\n'+str(di['ReceiveBytes']/1048576)+'MB\t\t'+str(di['ReceivePackets'])+'Packets\n发送:\n'+str(di['TransmitBytes']/1048576)+'MB\t\t'+str(di['TransmitPackets'])+'Packets\n\n'
-            return resu
-        info = eval(str(buf).strip('\n'))#将str再转换回dict结构
-        #分别存储CPU、磁盘等的输出信息
-        global buf1
-        global buf2
-        global buf3
-        global buf4
-        global buf5
-        buf1 = '总内存:\t\t'+str(info['mem_stat']['MemTotal']/1048576)+'MB\n剩余内存:\t\t'+str(info['mem_stat']['MemFree']/1048576)+'MB'
-        buf2 = 'Hardware:\t'+cst['Hardware']+'Model name:\t'+cst['model name']+'CPU implementer:\t'+cst['CPU implementer']+'CPU architecture:\t'+cst['CPU architecture']+'Features:\t'+cst['Features']
-        buf3 = str(info['runtime_stat']['day'])+'天'+str(info['runtime_stat']['hour'])+'时'+str(info['runtime_stat']['minute'])+'分'+str(info['runtime_stat']['second'])+'秒'#).strip('\n')
-        buf4 = netstat_proc(info['net_stat'])
-        buf5 = 'Available:\t\t'+str(info['disk_stat']['available']/1048576)+'GB\nUsed:\t\t'+str(info['disk_stat']['used']/1048576)+'GB\nCapacity:\t\t'+str(info['disk_stat']['capacity']/1048576)+'GB'
-#info['cpu_stat']['vendor_id'] + 
-
-if __name__ == "__main__":
-    # server_list = []
-    buf1 = ""
-    buf2 = ""
-    buf3 = ""
-    buf4 = ""
-    buf5 = ""
-    t1 = threading.Thread(target = main_window, args = ())#图形界面的线程
-    t2 = threading.Thread(target = get_info, args = ())#数据获取线程
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-\end{lstlisting}
-
-
-
-
-
-\textbf{Linux控制代码：}
-\begin{lstlisting}[language=Python]
-#ctrl-srv.py
-def parsecmd(strings):
-    midsplit = str(strings).split(" ")
-    if len(midsplit) >= 2 and midsplit[0] == "cmd":#检测命令头是否有cmd防止出错
-        try:
-            command = subprocess.Popen(strings[4:], shell=True)
-            command.communicate()
-            print "\n"
-        except Exception, e:
-            print e.message
-            traceback.print_exc()
-
-def recvdata(port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)#创建套接字
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(('', port))#绑定
-    s.listen(1)#监听端口
-    print "[+] Server is running on port:%s at %s" % (str(port), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
-    while True:
-        mainsocket, mainhost = s.accept()
-        print "[+] Connect success -> %s at %s" % (str(mainhost), time.strftime("%Y%m%d %H:%M:%S", time.localtime()))
-        if mainhost:
-            while True:
-                data = mainsocket.recv(1024)
-                if data:
-                    print "[+] Receive:%s" % data
-                    mainsocket.sendall("[Server]success")
-                    parsecmd(data)
-                if data == "close session":
-                    mainsocket.close()
-                    print "[+] Quit success"
-                    break
-            break
-
-
-if __name__ == "__main__":
-    # some public variable
-    connPort = 47091
-    onethreads = threading.Thread(target=recvdata, args=(connPort,))
-    onethreads.start()
-
-#-----------------------------------------------------------------#
-#ctrl-client.py
-def connserver(host, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((host, port))
-    while True:
-        print "\n[*] Please input command:"
-        data = raw_input()#获取输入指令
-        if not data:
-            break
-        s.sendall(data)#发送
-        recvdata = s.recv(1024)
-        print "[+] Send %s:%s -> %s" % (host, str(connPort), data)
-        time.sleep(0)
-        if recvdata:
-            print "[+] Receive :%s" % recvdata
-        if data == "close session":
-            s.close()
-            break
-
-if __name__ == "__main__":
-    host = '192.168.1.201'
-    connPort = 47091
-
-    connserver(host, connPort)#连接对应服务端
-\end{lstlisting}
-\chapter{开发工作评价}
-\section{对产品质量的评价}
-总的来说，最终的成品大体上是达到了可用的程度，如果直接拿到宿舍，能够日常使用，但是欠缺的地方还很多。有以下一些点：
-\begin{enumerate}
-  \item 没有wifi模块。相比于我自己用的路由器，这个东西最大的缺点就是没有wifi模块。这方面确实工作量比较大，最后的时间不太够，但是思路应该是对的，只是在碰到的问题上需要慢慢打磨。
-  \item 远程监控程序过于简陋。信息获取和控制两个程序，没有整合到一起，这对使用十分不方便。界面和功能上都十分简陋，如果日常使用，这个肯定是不够的。
-\end{enumerate}
-\section{组内成员评价}
-组内打分：
-\begin{enumerate}
-  \item 贾镇远：90分
-  \item 万政：85分
-  \item 肖法鲁：85分
-\end{enumerate}
-\chapter{经验与教训}
-本次课程设计，学到了很多东西。以前虽然也学了嵌入式的课程，也知道Bootloader，知道它的作用，但这些理解很抽象。在这次硬件课设中，我们对固件层、操作系统层和应用层都有接触，亲自编译内核，亲自制作嵌入式系统的启动分区。然后我们对嵌入式系统的启动流程和需要的文件，各文件的作用有了比以前更深、更具体的理解。
-
-
-以前我们使用Linux系统，只是使用，对整个系统的组成、Linux Kernel和文件系统之间是怎样的一个关系，都只有一个模糊的概念，知道些东西，但无法表达，不能算真正的理解。这些概念，现在，不再模糊。
-
-
-另一方面，在整个过程中，碰到的问题其实是比较多的，在这样一个不断找到问题根源，然后解决问题的过程中，我想我们更是得到了解决问题的通用方法，那就是查资料、找懂的人同时还必须具有耐心。也许这些还不完全，但确实能在碰到问题时给我们许多帮助。
-
-
-此次硬件课设让我感到遗憾的地方也有很多。我自己感觉这次硬件课设好像不同于上学期的软件课设。这次课设，很多时候我们都使用了别人给出的东西，开源的代码、官方给好的固件，最后拼凑成一个产品，只有最后的Python程序，是自己创造的东西。这让我心里有一种空落落的感觉，不同于上学期，从零构建一个软件工程的那种满足感。但实际上，我们所使用的那些东西，如果完全由我们自己来完成，可能吗？不可能。只说OpenWRT，就完全不可能由我们重写一个。
-
-
-但是仔细想想，或许，我需要的是一个思维的转变。
-
-
-到了路由器这个量级的产品，涉及的东西太多了，从硬件到操作系统，到软件，已经没办法自己独立完成了，该用的东西还得用，将别人的工作整合到一起也是一种创新，也有自己的工作量。
-况且，上学期写邮件客户端，也是调用了Python的各种库，底层的网络通信过程也是别人做好的封装，同样是用了别人的东西。
-
-
-现在的开发过程已经不同于我初学的时候，写的都是简单的程序，老师布置的作业，都是独自完成。如果自己要做一个完整的复杂一点的东西，已经不可能自己从零开始了，不实际，也没必要。“不要重复造轮子”，就是这样一个道理。就是要学会使用工具。
-
-
-这次硬件课设，给我们的这些感悟，以后，将成为我们的助力。
 \end{document}
 
 
