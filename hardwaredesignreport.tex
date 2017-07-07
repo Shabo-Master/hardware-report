@@ -89,6 +89,141 @@ MentoHUST是一个支持Windows、Linux、Mac OS下的第三方锐捷认证的�
 
 OpenWrt是适合于嵌入式设备的一个Linux发行版。相对原厂固件而言，OpenWrt不是一个单一、静态的固件，而是提供了一个可添加软件包的可写的文件系统。这使用户可以自由的选择应用程序和配置，而不必受设备提供商的限制，并且可以使用一些适合某方面应用的软件包来定制你的设备。对于开发者来说，OpenWrt是一个框架，开发者不必麻烦的构建整个固件就能得到想要的应用程序；对于用户来说，这意味着完全定制的能力，与以往不同的方式使用设备，OPKG包含超过3500个软件。
 
+\chapter{基础实验}
+
+我们的硬件课设分为基础实验和综合实验两部分。我们的实验是在Xilinx的FPGA-ARM平台上完成的，基础实验部分做了六个实验，来熟悉这个平台，这些实验实际上提供了我们后面的设计部分的基础。
+\section{使用Vivado创建嵌入式系统}
+\textbf{实验目的：}
+
+
+通过使用Vivado创建嵌入式系统，掌握vivado的使用方法和流程，熟悉为Zynq系统创建Vivado项目和使用IP Integrator创建硬件系统，掌握使用SDK创建标准内存测试项目和能够在板上运行测试应用程序。
+
+
+\textbf{实验步骤：}
+
+\begin{enumerate}
+  \item 新建一个vivado工程。其中，工程类型选择RTL Project，boards选择zybo。
+  \item 使用IP集成器创建新的Block Design，添加ZYNQ处理器模块。
+  \item 生成IP集成器输出，并启动SDK导出硬件。
+  \item 在SDK中生成TestApp。
+  \item 在Zybo board开发板上测试硬件。
+\end{enumerate}
+\textbf{实验中的问题：}
+
+
+在新建工程添加Boards时，一开始选项中没有zybo选项。解决方法：自己在Xilinx官网上下载zybo Boards资源，添加到Vivado的Boards文件夹中。
+
+\section{基于Zybo开发板设计IP核}
+
+\textbf{实验目的：}
+
+\begin{enumerate}
+  \item 使用Vivado的IP Packager功能创建自定义外设
+  \item 修改IP功能
+\end{enumerate}
+
+\textbf{实验步骤：}
+
+\begin{enumerate}
+  \item 使用提供的定制IP源代码创建自定义IP
+  \item 运行创建和打包IP向导
+  \item 创建LED的接口
+  \item 打包IP核
+\end{enumerate}
+
+\section{基于Zybo开发板实现IP核}
+
+\textbf{实验目的：}
+\begin{enumerate}
+  \item 将自定义IP核添加到设计中
+  \item 添加针位置约束
+  \item 将块内存添加到系统
+\end{enumerate}
+
+\textbf{实验步骤：}
+\begin{enumerate}
+  \item 设置“项目设置”为指向创建IP库。
+  \item 将led\_ip添加到设计中，并与IPI中的AXI4Lite互连。内部和外部端口连接。将LED端口设置为外部FPGA引脚。
+  \item 将BRAM添加到设计中
+  \item 更新顶级包装器并添加提供的lab3 \_ *.xdc约束文件。
+\end{enumerate}
+\textbf{实验中的问题：}
+
+
+不能在Re-customize IP窗口中看到“led\_width”
+
+
+\textbf{解决方法：}
+
+
+在IP Catalog中打开“led\_ip”,右击led\_ip\_v1.0进行编辑。选择"Customization GUI",点击"Add Parameter"添加"LED\_WIDTH",重新打包IP。
+\section{基于Zybo开发板编写应用软件}
+
+\textbf{实验目的：}
+\begin{enumerate}
+  \item 掌握编写基本应用程序。
+  \item 熟悉生成可执行文件并下载比特流和应用程序，在Zybo板上进行验证。
+\end{enumerate}
+
+\textbf{实验步骤：}
+\begin{enumerate}
+  \item 打开实验三中实现IP核后的工程，将其另存为实验四。
+  \item 将其导入到SDK中并在SDK中新建一个应用工程。
+  \item 分析组装对象文件
+  \item 在硬件上验证功能
+\end{enumerate}
+
+\textbf{实验中的问题：}
+
+
+在实验中，我们翻转开关，"终端"选项卡中显示的消息可以随着开关的变化而变化，但是LED灯的亮灭无任何变化。
+
+
+\textbf{解决方法：}
+
+
+由于硬件平台中LED\_IP起始地址和SDK应用软件中地址不一致，所以开关无法控制LED灯。所以需要将编写的应用软件中的LED\_IP地址修改和硬件平台中一致。
+
+\section{基于Zybo开发板编写中断软件}
+
+\textbf{实验目的：}
+\begin{enumerate}
+  \item 掌握SDK的使用方法，能熟练使用SDK编写代码，烧制bit流文件，运行应用程序。
+  \item 熟悉Vivado HLS C中断程序的编写，熟悉支持中断的硬件平台的搭建。
+  \item 了解Zybo平台中断模块的原理和结构。
+\end{enumerate}
+
+\textbf{程序整体功能：}
+
+
+开发板上有四个按键和四个小灯。按下按键，能使四个小灯中对应的小灯点亮。
+
+
+\textbf{实验中的问题：}
+
+
+程序写进去之后，按键发现灯不亮。后来发现原来是小灯忘了初始化。导致花了很多时间，都是在盲目的找错误，没有系统的debug手段，浪费很多时间。这里就需要，一个是要有比较好的查错，能定位到错误发生的地方。我这里是在代码中关键地方使用print函数来看代码有无问题，后来比对网上的范例才发现原来是粗心导致LED定义的语句被误删了。
+
+\section{基于Zybo开发板编写调试软件}
+
+\textbf{实验目的：}
+\begin{enumerate}
+  \item 掌握SDK调试的使用方法，能熟练使用SDK调试程序，解决error，掌握自建IP核的使用方法。
+  \item 熟悉Vivado HLS C中断程序的编写，熟悉支持中断的硬件平台的搭建，熟悉查看API来编写、修改程序的方法。
+  \item 了解Zybo平台的原理和结构。
+\end{enumerate}
+
+\textbf{程序整体功能：}
+
+
+开发板上有四个按键、四个拨动开关和四个小灯。按下按键，能使四个小灯中对应的小灯点亮。
+
+
+\textbf{实验中的问题：}
+
+
+在将代码的error全部改好之后，在开发板上运行起来，发现小灯并不亮。连上COM口，发现终端有输出，于是开启调试模式。查看count变量的值，与预期的值相符合。
+
 \chapter{设计与实现}
 \section{预期目标}
 我们选的课题是“锐捷认证”。但只是一个能通过校园网锐捷认证的开发板实际意义不大，所以我们还想做一个多网口设备出来。
@@ -411,11 +546,24 @@ if __name__ == "__main__":
   \item 远程监控程序过于简陋。信息获取和控制两个程序，没有整合到一起，这对使用十分不方便。界面和功能上都十分简陋，如果日常使用，这个肯定是不够的。
 \end{enumerate}
 \section{组内成员评价}
+成员完成工作情况：
+
+
+贾镇远负责硬件平台和操作系统的搭建，实现基础功能。
+
+
+肖法鲁负责
+
+
+万政负责
+
+
+
 组内打分：
 \begin{enumerate}
-  \item 贾镇远：90分
-  \item 万政：85分
-  \item 肖法鲁：85分
+  \item 贾镇远：120分
+  \item 万政：90分
+  \item 肖法鲁：90分
 \end{enumerate}
 \chapter{经验与教训}
 本次课程设计，学到了很多东西。以前虽然也学了嵌入式的课程，也知道Bootloader，知道它的作用，但这些理解很抽象。在这次硬件课设中，我们对固件层、操作系统层和应用层都有接触，亲自编译内核，亲自制作嵌入式系统的启动分区。然后我们对嵌入式系统的启动流程和需要的文件，各文件的作用有了比以前更深、更具体的理解。
