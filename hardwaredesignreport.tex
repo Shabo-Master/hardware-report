@@ -1,9 +1,16 @@
 \documentclass{itecreport-zh}
 
-\title{硬件课程设计实验报告}{Course Exercise of Hardware Design Report}
+\title{基于ONetSwitch的家庭网关设计}{A Gateway Design Basing on ONetSwitch}
 \author
-{贾镇远}
-{Zhenyuan Jia}
+{贾镇远
+肖法鲁
+万政
+}
+{Zhenyuan Jia
+Falu Xiao
+Zheng Wan
+}
+
 \supervisor
 {黑晓军\hspace{1em}副教授}
 {Ass. Prof. Xiaojun Hei}
@@ -16,8 +23,13 @@
 
 	贾镇远、肖法鲁、万政
 
+
+  课设中我们设计了一个家庭网关，它能通过目前高校中应用广泛的锐捷认证，支持NAT，实现多设备上网，同时还加入了适用于Linux系统的基于网络的远程监控程序，远程对该设备的状态进行监视，并进行控制。
+
+
+  这样一个设备，能让我们脱离校园网单帐号，单设备的限制。
 }
-\zhkeywords{硬件课程设计，实验报告}
+\zhkeywords{硬件课程设计，实验报告，网关，嵌入式Linux}
 
 \enabstract
 {
@@ -26,9 +38,15 @@
 
 
     Zhenyuan Jia, Zheng Wan and Falu Xiao.
+
+
+    We designed a gateway equipment, which can authenticate the Ruijie protocol. It also surport NAT, multi-device can be connect to the Internet via it. We implement a software program to get info form it and control it.
+
+
+    The equipment can make multi-device conneting to the Internet, when we only have one account.
 }
 \enkeywords
-{Hardware Course Design, Report}
+{Hardware Course Design, Report，Gateway，Embedded Linux}
 
 \begin{document}
 
@@ -595,8 +613,8 @@ if __name__ == "__main__":
 组内打分：
 \begin{enumerate}
   \item 贾镇远：90分
-  \item 万政：
-  \item 肖法鲁：
+  \item 万政：85分
+  \item 肖法鲁：85分
 \end{enumerate}
 \chapter{经验与教训}
 本次课程设计，学到了很多东西。以前虽然也学了嵌入式的课程，也知道Bootloader，知道它的作用，但这些理解很抽象。在这次硬件课设中，我们对固件层、操作系统层和应用层都有接触，亲自编译内核，亲自制作嵌入式系统的启动分区。然后我们对嵌入式系统的启动流程和需要的文件，各文件的作用有了比以前更深、更具体的理解。
