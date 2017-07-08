@@ -7,4 +7,5 @@
 *.thm
 *.toc
 *.dvi
-
+*.bbl
+*.blg
